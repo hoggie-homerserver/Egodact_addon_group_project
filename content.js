@@ -15,7 +15,7 @@
     const SUGGESTED_ROLES = (C.suggestedRoles || ['Leider', 'Schrijver', 'Onderzoeker', 'Presentator', 'Vormgever', 'Notulist', 'Tester']);
 
     const ADDON_ID = 'egodact-group-project';
-    const VERSION = '0.1.5';
+    const VERSION = '0.1.6';
 
     client.registerAddon({
         id: ADDON_ID,
@@ -577,15 +577,31 @@
         });
     }
 
+    function showRenderError(body, err) {
+        const msg = (err && err.message) ? err.message : String(err);
+        const div = document.createElement('div');
+        div.style.cssText = 'padding:14px;color:#c62828;font-size:12px;white-space:pre-wrap;';
+        div.textContent = 'Weergave mislukt: ' + msg;
+        body.appendChild(div);
+        console.error('[GroupProject] render error:', err);
+        try { ui.toast('Weergave mislukt: ' + msg.slice(0, 160), { type: 'error' }); } catch (e) {}
+    }
+
     function refreshBody() {
+
         if (!currentBackdrop) return;
         const body = currentBackdrop.querySelector('#gp-body');
         if (!body) return;
         body.innerHTML = '';
-        if (currentTab === 'mytasks') renderMyTasks(body);
-        else if (currentTab === 'board') renderBoard(body);
-        else if (selectedId) renderBoard(body);
-        else renderProjects(body);
+        if (currentTab === 'mytasks') {
+            try { renderMyTasks(body); } catch (err) { showRenderError(body, err); }
+        } else if (currentTab === 'board') {
+            try { renderBoard(body); } catch (err) { showRenderError(body, err); }
+        } else if (selectedId) {
+            try { renderBoard(body); } catch (err) { showRenderError(body, err); }
+        } else {
+            try { renderProjects(body); } catch (err) { showRenderError(body, err); }
+        }
         updateTabs();
     }
 
@@ -898,6 +914,8 @@
 
             // subtasks
             const subs = t.subtasks || [];
+            const usersById = {};
+            challengeUsers(c).forEach(function (u) { usersById[String(u.id)] = u; });
             const subWrap = document.createElement('div');
             Object.assign(subWrap.style, { display: 'flex', flexDirection: 'column', gap: '3px', marginTop: '4px' });
             const sp = taskProgress(t);
@@ -943,7 +961,7 @@
             const noOpt = document.createElement('option');
             noOpt.value = ''; noOpt.textContent = '—';
             subAssignSel.appendChild(noOpt);
-            (c.users || []).forEach(function (u) {
+            (challengeUsers(c)).forEach(function (u) {
                 const o = document.createElement('option');
                 o.value = u.id; o.textContent = u.firstName || u.name;
                 subAssignSel.appendChild(o);

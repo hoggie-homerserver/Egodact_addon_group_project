@@ -158,7 +158,10 @@
             await tasksRef(challengeId).doc(taskId).set(Object.assign({}, patch, {
                 updatedAt: firebase.firestore.FieldValue.serverTimestamp()
             }), { merge: true });
-            localDelete(challengeId, taskId);
+            // Keep the local copy as a fallback until the remote snapshot
+            // confirms the write; the hybrid listener dedupes by id, so this
+            // never shows a duplicate and prevents tasks vanishing on a
+            // delayed/failed snapshot.
         } catch (err) {
             console.warn('[GroupProject] updateTask failed, keeping a local copy:', err);
             reportError(err);
