@@ -15,7 +15,7 @@
     const SUGGESTED_ROLES = (C.suggestedRoles || ['Leider', 'Schrijver', 'Onderzoeker', 'Presentator', 'Vormgever', 'Notulist', 'Tester']);
 
     const ADDON_ID = 'egodact-group-project';
-    const VERSION = '0.1.3';
+    const VERSION = '0.1.4';
 
     client.registerAddon({
         id: ADDON_ID,
@@ -194,6 +194,68 @@
     }
     function saveRoles(challengeId) {
         try { localStorage.setItem('egodact_group_roles_' + challengeId, JSON.stringify(rolesByChallenge[challengeId] || {})); } catch (e) {}
+    }
+
+    // ---------- assignees ----------
+    // Members of a challenge, always with a string id.
+    function challengeUsers(c) {
+        const list = [];
+        const seen = {};
+        ((c && c.users) || []).forEach(function (u) {
+            if (!u) return;
+            const id = (u.id != null) ? String(u.id) : '';
+            if (!id || seen[id]) return;
+            seen[id] = true;
+            list.push(u);
+        });
+        return list;
+    }
+
+    // Firestore round-trips can give us numbers, objects or old names.
+    // Normalise everything to unique member ids.
+    function normalizeAssignees(t, c) {
+        const raw = (t && t.assignees) || [];
+        const arr = Array.isArray(raw) ? raw : [raw];
+        const byId = {};
+        const byName = {};
+        challengeUsers(c).forEach(function (u) {
+            const id = String(u.id);
+            byId[id] = id;
+            if (u.name) byName[String(u.name).toLowerCase()] = id;
+            if (u.firstName) byName[String(u.firstName).toLowerCase()] = id;
+        });
+        const out = [];
+        const seen = {};
+        arr.forEach(function (v) {
+            if (v == null) return;
+            if (typeof v === 'object') {
+                v = (v.id != null) ? v.id : ((v.userId != null) ? v.userId : (v.name || ''));
+            }
+            let key = String(v).trim();
+            if (!key) return;
+            const matched = byId[key] || byName[key.toLowerCase()];
+            if (matched) key = matched;
+            if (seen[key]) return;
+            seen[key] = true;
+            out.push(key);
+        });
+        return out;
+    }
+
+    // Assignee ids -> user objects, keeping unknown ids visible instead of
+    // dropping them (so an assignment never silently "disappears").
+    function assigneeUsers(c, t) {
+        const byId = {};
+        challengeUsers(c).forEach(function (u) { byId[String(u.id)] = u; });
+        return normalizeAssignees(t, c).map(function (id) {
+            return byId[id] || { id: id, name: id, firstName: id };
+        });
+    }
+
+    function compactName(u) {
+        const name = (u && (u.name || u.firstName)) || '?';
+        const first = (u && u.firstName) || name.split(' ')[0];
+        return first || name;
     }
 
     function avatarEl(user, size) {
@@ -660,8 +722,8 @@
                 if (f === 'all') return true;
                 if (f === 'done') return t.status === 'done';
                 if (f === 'todo') return t.status !== 'done';
-                if (f === 'mine') return (t.assignees || []).indexOf(meId) !== -1;
-                if (f === 'unassigned') return !(t.assignees && t.assignees.length);
+                if (f === 'mine') return normalizeAssignees(t, c).indexOf((meId == null) ? '' : String(meId)) !== -1;
+                if (f === 'unassigned') return normalizeAssignees(t, c).length === 0;
                 return true;
             });
             renderTaskList(listContainer, filtered, c);
@@ -721,14 +783,19 @@
             const meta = document.createElement('div');
             Object.assign(meta.style, { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' });
             const assignWrap = document.createElement('div');
-            Object.assign(assignWrap.style, { display: 'flex', gap: '3px' });
-            const usersById = {};
-            (c.users || []).forEach(function (u) { usersById[u.id] = u; });
-            (t.assignees || []).forEach(function (aid) {
-                const u = usersById[aid] || { id: aid, name: aid, firstName: aid };
-                assignWrap.appendChild(avatarEl(u, 18));
+            Object.assign(assignWrap.style, { display: 'flex', gap: '4px', flexWrap: 'wrap', alignItems: 'center' });
+            const assigned = assigneeUsers(c, t);
+            assigned.forEach(function (u) {
+                const chip = document.createElement('span');
+                Object.assign(chip.style, { display: 'inline-flex', alignItems: 'center', gap: '4px', background: 'var(--egd-paneel)', border: '1px solid var(--egd-rand)', borderRadius: '999px', padding: '1px 7px 1px 1px', fontSize: '10px', lineHeight: '1.4' });
+                chip.title = 'Toegewezen aan ' + ((u && u.name) || u.id);
+                chip.appendChild(avatarEl(u, 16));
+                const nm = document.createElement('span');
+                nm.textContent = compactName(u);
+                chip.appendChild(nm);
+                assignWrap.appendChild(chip);
             });
-            if (!(t.assignees && t.assignees.length)) {
+            if (!assigned.length) {
                 const none = document.createElement('span');
                 none.textContent = 'Niet toegewezen';
                 none.style.cssText = 'font-size:10px;color:var(--egd-tekst-zacht);font-style:italic;';
@@ -864,20 +931,27 @@
         h.textContent = 'Toewijzen: ' + t.title;
         h.style.cssText = 'margin:0;font-size:16px;';
         modal.appendChild(h);
-        const sel = new Set(t.assignees || []);
+        const sel = new Set(normalizeAssignees(t, c));
+        const memberList = challengeUsers(c);
+        const knownIds = {};
+        memberList.forEach(function (u) { knownIds[String(u.id)] = true; });
+        sel.forEach(function (id) {
+            if (!knownIds[id]) { knownIds[id] = true; memberList.push({ id: id, name: id, firstName: id }); }
+        });
         const list = document.createElement('div');
         list.style.cssText = 'display:flex;flex-direction:column;gap:6px;max-height:260px;overflow-y:auto;';
-        (c.users || []).forEach(function (u) {
+        memberList.forEach(function (u) {
+            const uid = String(u.id);
             const row = document.createElement('label');
             Object.assign(row.style, { display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 8px', background: 'var(--egd-veld)', borderRadius: '6px', cursor: 'pointer' });
             const cb = document.createElement('input');
             cb.type = 'checkbox';
-            cb.checked = sel.has(u.id);
-            cb.addEventListener('change', function () { if (cb.checked) sel.add(u.id); else sel.delete(u.id); });
+            cb.checked = sel.has(uid);
+            cb.addEventListener('change', function () { if (cb.checked) sel.add(uid); else sel.delete(uid); });
             row.appendChild(cb);
             row.appendChild(avatarEl(u, 22));
             const nm = document.createElement('span');
-            nm.textContent = u.name;
+            nm.textContent = (u.name || u.firstName || u.id);
             row.appendChild(nm);
             list.appendChild(row);
         });
@@ -891,9 +965,18 @@
         const save = document.createElement('button');
         save.type = 'button'; save.textContent = 'Opslaan';
         Object.assign(save.style, { padding: '8px 12px', border: 'none', borderRadius: '4px', background: 'var(--egd-accent)', color: 'var(--egd-accent-tekst)', cursor: 'pointer', fontWeight: 'bold' });
-        save.addEventListener('click', function () {
-            T.updateTask(c.id, t.id, { assignees: Array.from(sel) });
+        save.addEventListener('click', async function () {
+            save.disabled = true;
+            try {
+                await T.updateTask(c.id, t.id, { assignees: Array.from(sel) });
+            } catch (err) {
+                save.disabled = false;
+                ui.toast('Toewijzen mislukt: ' + ((err && err.message) || err), { type: 'error' });
+                return;
+            }
+            t.assignees = Array.from(sel);
             backdrop.remove();
+            refreshBody();
         });
         btns.append(cancel, save);
         modal.appendChild(btns);
@@ -973,18 +1056,35 @@
         // assignees
         const assignWrap = document.createElement('div');
         Object.assign(assignWrap.style, { display: 'flex', flexWrap: 'wrap', gap: '6px' });
-        const selectedAssignees = new Set(existing ? (existing.assignees || []) : (meId ? [meId] : []));
-        (c.users || []).forEach(function (u) {
+        const memberList = challengeUsers(c);
+        const knownIds = {};
+        memberList.forEach(function (u) { knownIds[String(u.id)] = true; });
+        // Only preselect yourself when you are actually a member of this
+        // challenge (ids can differ between challenge payloads).
+        const defaultMe = (meId != null && knownIds[String(meId)]) ? [String(meId)] : [];
+        const selectedAssignees = new Set(existing ? normalizeAssignees(existing, c) : defaultMe);
+        // Keep assignments to people who are no longer in the member list
+        // visible (and removable) instead of dropping them on the next save.
+        selectedAssignees.forEach(function (id) {
+            if (!knownIds[id]) {
+                knownIds[id] = true;
+                memberList.push({ id: id, name: id, firstName: id });
+            }
+        });
+        memberList.forEach(function (u) {
+            const uid = String(u.id);
             const lbl = document.createElement('label');
             Object.assign(lbl.style, { display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 6px', background: 'var(--egd-veld)', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' });
             const cb = document.createElement('input');
             cb.type = 'checkbox';
-            cb.checked = selectedAssignees.has(u.id);
-            cb.addEventListener('change', function () { if (cb.checked) selectedAssignees.add(u.id); else selectedAssignees.delete(u.id); });
+            cb.checked = selectedAssignees.has(uid);
+            cb.addEventListener('change', function () {
+                if (cb.checked) selectedAssignees.add(uid); else selectedAssignees.delete(uid);
+            });
             lbl.appendChild(cb);
             lbl.appendChild(avatarEl(u, 16));
             const nm = document.createElement('span');
-            nm.textContent = u.firstName || u.name;
+            nm.textContent = compactName(u);
             lbl.appendChild(nm);
             assignWrap.appendChild(lbl);
         });
@@ -1102,7 +1202,7 @@
         const all = [];
         gcs.forEach(function (c) {
             getTasks(c.id).forEach(function (t) {
-                if ((t.assignees || []).indexOf(meId) !== -1) all.push({ challenge: c, task: t });
+                if (meId != null && normalizeAssignees(t, c).indexOf(String(meId)) !== -1) all.push({ challenge: c, task: t });
             });
         });
         all.sort(function (a, b) {
