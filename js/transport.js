@@ -38,6 +38,10 @@
             try { db.settings({ experimentalAutoDetectLongPolling: true }); } catch (e) {}
             const cred = await auth.signInAnonymously();
             fbUser = cred && cred.user ? cred.user : null;
+            // Verify that Firestore actually accepts our reads. If the rules
+            // have not been deployed, writes would fail silently and tasks
+            // would seem to disappear — so fall back to local storage instead.
+            await db.collection(COL).limit(1).get();
             mode = 'firebase';
         } catch (err) {
             mode = 'local';
@@ -45,6 +49,15 @@
             console.warn('[GroupProject] Firebase init failed, local mode:', initError);
         }
         readyResolve();
+    }
+
+    // Surface write problems to the UI instead of failing silently.
+    function reportError(err) {
+        try {
+            window.dispatchEvent(new CustomEvent('egodact:group:error', {
+                detail: { message: (err && err.message) ? err.message : String(err) }
+            }));
+        } catch (e) {}
     }
 
     // ---------- Firestore helpers ----------
@@ -83,16 +96,40 @@
 
     function listenTasks(challengeId, cb) {
         if (mode !== 'firebase') return localListen(challengeId, cb);
+        let stopped = false;
+        let remote = [];
         let unsub = null;
+
+        function emit() {
+            if (stopped) return;
+            const byId = {};
+            remote.forEach(function (t) { if (t && t.id && !byId[t.id]) byId[t.id] = t; });
+            // Local-only tasks (saved because a write failed) stay visible.
+            localRead(challengeId).forEach(function (t) { if (t && t.id && !byId[t.id]) byId[t.id] = t; });
+            cb(Object.keys(byId).map(function (k) { return byId[k]; }), null);
+        }
+
         try {
             unsub = tasksRef(challengeId).orderBy('order').onSnapshot(function (snap) {
-                const tasks = snap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
-                cb(tasks, null);
-            }, function (err) { cb(null, err); });
+                remote = snap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
+                emit();
+            }, function (err) {
+                if (!stopped) cb(null, err);
+            });
         } catch (err) {
             cb(null, err);
         }
-        return function () { if (typeof unsub === 'function') try { unsub(); } catch (e) {} };
+
+        const localHandler = function (e) {
+            if (e && e.detail && e.detail.challengeId === challengeId) emit();
+        };
+        window.addEventListener('egodact:group:changed', localHandler);
+
+        return function () {
+            stopped = true;
+            window.removeEventListener('egodact:group:changed', localHandler);
+            if (typeof unsub === 'function') try { unsub(); } catch (e) {}
+        };
     }
 
     async function createTask(challengeId, task) {
@@ -103,20 +140,39 @@
             createdAt: firebase.firestore.FieldValue.serverTimestamp(),
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         });
-        await ref.set(data);
-        return ref.id;
+        try {
+            await ref.set(data);
+            return ref.id;
+        } catch (err) {
+            console.warn('[GroupProject] createTask failed, keeping a local copy:', err);
+            reportError(err);
+            return localCreate(challengeId, task);
+        }
     }
 
     async function updateTask(challengeId, taskId, patch) {
         if (mode !== 'firebase') return localUpdate(challengeId, taskId, patch);
-        await tasksRef(challengeId).doc(taskId).set(Object.assign({}, patch, {
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        }), { merge: true });
+        try {
+            await tasksRef(challengeId).doc(taskId).set(Object.assign({}, patch, {
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            }), { merge: true });
+            localDelete(challengeId, taskId);
+        } catch (err) {
+            console.warn('[GroupProject] updateTask failed, keeping a local copy:', err);
+            reportError(err);
+            localUpsert(challengeId, taskId, patch);
+        }
     }
 
     async function deleteTask(challengeId, taskId) {
         if (mode !== 'firebase') return localDelete(challengeId, taskId);
-        await tasksRef(challengeId).doc(taskId).delete();
+        try {
+            await tasksRef(challengeId).doc(taskId).delete();
+            localDelete(challengeId, taskId);
+        } catch (err) {
+            console.warn('[GroupProject] deleteTask failed:', err);
+            reportError(err);
+        }
     }
 
     // ---------- Local demo mode ----------
@@ -162,6 +218,13 @@
         const idx = tasks.findIndex(function (t) { return t.id === taskId; });
         if (idx === -1) return;
         tasks[idx] = Object.assign({}, tasks[idx], patch, { updatedAt: Date.now() });
+        localWrite(challengeId, tasks);
+    }
+    function localUpsert(challengeId, taskId, patch) {
+        const tasks = localRead(challengeId);
+        const idx = tasks.findIndex(function (t) { return t.id === taskId; });
+        if (idx === -1) tasks.push(Object.assign({ id: taskId }, patch, { updatedAt: Date.now() }));
+        else tasks[idx] = Object.assign({}, tasks[idx], patch, { updatedAt: Date.now() });
         localWrite(challengeId, tasks);
     }
     function localDelete(challengeId, taskId) {

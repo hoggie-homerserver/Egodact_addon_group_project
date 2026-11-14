@@ -1,30 +1,110 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Group checklists: one document per Egodact challenge.
-    match /groupchecklists/{challengeId} {
-      allow read: if request.auth != null;
-      allow create, update: if request.auth != null
-        && request.resource.data.keys().hasAll(['challengeId'])
-        && request.resource.data.challengeId == challengeId;
-      allow delete: if request.auth != null;
+    function signedIn() {
+      return request.auth != null;
+    }
 
-      // Tasks subcollection.
+    function validRoom(data) {
+      return data.keys().hasAll(['type', 'members', 'createdAt'])
+        && data.type in ['dm', 'group']
+        && data.members is list
+        && data.members.size() >= 2
+        && data.members.size() <= 100
+        && data.createdAt is timestamp
+        && (!data.keys().hasAny(['name']) || (data.name is string && data.name.size() <= 120))
+        && (!data.keys().hasAny(['lastMessage']) || (data.lastMessage is string && data.lastMessage.size() <= 200));
+    }
+
+    function validAttachment(data) {
+      return data is map
+        && data.keys().hasAll(['name', 'size', 'type', 'storage'])
+        && data.name is string
+        && data.name.size() > 0
+        && data.name.size() <= 255
+        && data.size is int
+        && data.size > 0
+        && data.size <= 25 * 1024 * 1024
+        && data.type in ['image', 'video', 'audio', 'file']
+        && data.storage in ['firebase', 'local', 'inline', 'cloudinary']
+        && (!data.keys().hasAny(['mime']) || (data.mime is string && data.mime.size() <= 128))
+        && (!data.keys().hasAny(['path']) || (data.path is string && data.path.size() <= 512))
+        && (!data.keys().hasAny(['url']) || (data.url is string && data.url.size() <= 2048))
+        && (!data.keys().hasAny(['id']) || (data.id is string && data.id.size() <= 128))
+        && (!data.keys().hasAny(['data']) || (data.data is string && data.data.size() <= 950000))
+        && (!data.keys().hasAny(['publicId']) || (data.publicId is string && data.publicId.size() <= 256));
+    }
+
+    function validMessage(data) {
+      return data.keys().hasAll(['text', 'senderId', 'senderName', 'createdAt'])
+        && data.text is string
+        && data.text.size() <= 2000
+        && (data.text.size() > 0 || data.keys().hasAny(['attachment']))
+        && data.senderId is string
+        && data.senderId.size() > 0
+        && data.senderId.size() <= 128
+        && data.senderName is string
+        && data.senderName.size() <= 80
+        && data.createdAt is timestamp
+        && (!data.keys().hasAny(['senderPhoto']) || (data.senderPhoto is string && data.senderPhoto.size() <= 2000))
+        && (!data.keys().hasAny(['senderUid']) || (data.senderUid is string && data.senderUid.size() <= 128))
+        && (!data.keys().hasAny(['reactions']) || data.reactions is map)
+        && (!data.keys().hasAny(['editedAt']) || data.editedAt is timestamp)
+        && (!data.keys().hasAny(['attachment']) || validAttachment(data.attachment));
+    }
+
+    function isSender() {
+      return signedIn() && request.auth.uid == resource.data.get('senderUid', '');
+    }
+
+    function isUnowned() {
+      return !resource.data.keys().hasAny(['senderUid']);
+    }
+
+    function editedTextIsValid() {
+      return request.resource.data.text is string
+        && request.resource.data.text.size() > 0
+        && request.resource.data.text.size() <= 2000;
+    }
+
+    match /rooms/{roomId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && validRoom(request.resource.data);
+      allow update: if signedIn() && validRoom(request.resource.data);
+      allow delete: if false;
+
+      match /messages/{messageId} {
+        allow read: if signedIn();
+        allow create: if signedIn() && validMessage(request.resource.data);
+
+        allow update: if signedIn() && (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions'])
+          || (
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'editedAt', 'reactions', 'senderUid'])
+            && editedTextIsValid()
+            && request.resource.data.senderUid is string
+            && request.resource.data.senderUid.size() <= 128
+            && (
+              isSender()
+              || (isUnowned() && request.resource.data.senderUid == request.auth.uid)
+            )
+          )
+        );
+
+        allow delete: if signedIn() && (isSender() || isUnowned());
+      }
+    }
+
+    // ---------- Egodact Group Project addon ----------
+    // One document per Egodact challenge, tasks in a subcollection.
+    // Any signed-in (anonymous) user of the school project may read/write.
+    match /groupchecklists/{challengeId} {
+      allow read, write: if signedIn();
+
       match /tasks/{taskId} {
-        allow read: if request.auth != null;
-        allow create: if request.auth != null
-          && request.resource.data.keys().hasAll(['title', 'status'])
-          && request.resource.data.title is string
-          && request.resource.data.title.size() > 0
-          && request.resource.data.title.size() <= 200
-          && request.resource.data.status in ['todo', 'doing', 'done', 'blocked'];
-        allow update: if request.auth != null
-          && request.resource.data.title is string
-          && request.resource.data.title.size() > 0
-          && request.resource.data.title.size() <= 200
-          && request.resource.data.status in ['todo', 'doing', 'done', 'blocked'];
-        allow delete: if request.auth != null;
+        allow read, write: if signedIn();
       }
     }
   }

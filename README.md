@@ -20,5 +20,13 @@ Shared task checklists (with subtasks, assignees, roles, deadlines and progress)
 ## Firebase
 Uses the same Firebase project as the Egodact Chat addon. Enable Anonymous auth and publish `firestore.rules`.
 
+The rules file in this repo contains **both** the Chat rules (`rooms`) and the group-project rules (`groupchecklists`), so deploying it does not break the Chat addon.
+
+```
+firebase deploy --only firestore:rules --project egodact-extension
+```
+
+If Firestore rejects reads/writes, the addon automatically falls back to local storage and shows an error toast instead of losing tasks. The badge in the dialog header shows the active mode (`Live` / `Lokaal`) and the addon version.
+
 ## Files
 manifest.json, sdk.js, lib.js, config.js, background.js, content.js, js/transport.js, js/store.js, vendor/*, firestore.rules.

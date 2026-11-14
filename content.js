@@ -15,11 +15,12 @@
     const SUGGESTED_ROLES = (C.suggestedRoles || ['Leider', 'Schrijver', 'Onderzoeker', 'Presentator', 'Vormgever', 'Notulist', 'Tester']);
 
     const ADDON_ID = 'egodact-group-project';
+    const VERSION = '0.1.2';
 
     client.registerAddon({
         id: ADDON_ID,
         name: 'Egodact Group Project',
-        version: '0.1.0',
+        version: VERSION,
         description: 'Shared task checklists for group challenges.',
         author: 'MaxiTaxi'
     });
@@ -48,6 +49,7 @@
     let selectedId = null;
     let tasksByChallenge = {};
     let listeners = {};
+    let warnedChallenges = {};
     let meId = null;
     let rolesByChallenge = {}; // challengeId -> { userId: role }
     let currentBackdrop = null;
@@ -279,16 +281,29 @@
             }
         }
         if (meId === null) resolveMe();
+        // Listen to every group challenge, not just the one being opened,
+        // so "Mijn taken" and the project progress are complete.
+        groupChallenges().forEach(function (c) { listenChallenge(c.id); });
     }
 
     function listenChallenge(challengeId) {
         if (listeners[challengeId]) return;
         const ch = challenges.find(function (c) { return c.id === challengeId; });
         if (ch) {
-            try { T.ensureChecklist(challengeId, { name: ch.name, members: (ch.users || []).map(function (u) { return u.id; }), memberProfiles: {} }); } catch (e) {}
+            try {
+                const p = T.ensureChecklist(challengeId, { name: ch.name, members: (ch.users || []).map(function (u) { return u.id; }), memberProfiles: {} });
+                if (p && typeof p.catch === 'function') p.catch(function (err) { console.warn('ensureChecklist err', err); });
+            } catch (e) {}
         }
         const unsub = T.listenTasks(challengeId, function (tasks, err) {
-            if (err) { console.warn('listenTasks err', err); return; }
+            if (err) {
+                console.warn('listenTasks err', err);
+                if (!warnedChallenges[challengeId]) {
+                    warnedChallenges[challengeId] = true;
+                    ui.toast('Synchronisatie mislukt' + (ch ? ' (' + ch.name + ')' : '') + ': ' + ((err && err.message) || err), { type: 'error' });
+                }
+                return;
+            }
             tasksByChallenge[challengeId] = (tasks || []).slice().sort(function (a, b) { return (a.order || 0) - (b.order || 0) || (a.createdAt || 0) - (b.createdAt || 0); });
             if (currentBackdrop) refreshBody();
         });
@@ -370,7 +385,10 @@
         title.style.cssText = 'margin:0;font-size:20px;font-weight:500;flex:1;';
         const modeBadge = document.createElement('span');
         modeBadge.style.cssText = 'font-size:11px;padding:2px 8px;border-radius:999px;background:var(--egd-veld);border:1px solid var(--egd-rand);';
-        modeBadge.textContent = (T.mode === 'firebase') ? 'Live' : 'Lokaal';
+        modeBadge.textContent = (T.mode === 'firebase' ? 'Live' : 'Lokaal') + ' · v' + VERSION;
+        modeBadge.title = T.mode === 'firebase'
+            ? 'Taken worden gedeeld via Firebase.'
+            : ('Lokale modus: ' + (T.error || 'Firebase niet beschikbaar'));
         const closeBtn = document.createElement('button');
         closeBtn.type = 'button';
         closeBtn.textContent = 'Sluiten';
@@ -886,15 +904,16 @@
         const c = challenges.find(function (x) { return x.id === challengeId; });
         const backdrop = document.createElement('div');
         backdrop.id = 'egodact-custom-modal-backdrop';
-        Object.assign(backdrop.style, { position: 'fixed', top: '0', left: '0', width: '100vw', height: '100vh', backgroundColor: 'var(--egd-backdrop)', zIndex: '10000000', fontFamily: 'Arial, sans-serif', overflowY: 'auto', overflowX: 'hidden', padding: '16px 0', boxSizing: 'border-box', overscrollBehavior: 'contain' });
+        Object.assign(backdrop.style, { position: 'fixed', top: '0', left: '0', width: '100vw', height: '100vh', backgroundColor: 'var(--egd-backdrop)', zIndex: '10000000', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Arial, sans-serif', overflow: 'auto', padding: '16px', boxSizing: 'border-box', overscrollBehavior: 'contain' });
         const modal = document.createElement('div');
-        Object.assign(modal.style, { backgroundColor: 'var(--egd-modal)', color: 'var(--egd-tekst)', width: 'min(460px, calc(100vw - 32px))', boxSizing: 'border-box', borderRadius: '6px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '10px', boxShadow: 'var(--egd-schaduw)', margin: '0 auto' });
+        Object.assign(modal.style, { backgroundColor: 'var(--egd-modal)', color: 'var(--egd-tekst)', width: 'min(460px, calc(100vw - 32px))', maxHeight: 'calc(100vh - 32px)', boxSizing: 'border-box', borderRadius: '6px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '10px', boxShadow: 'var(--egd-schaduw)', margin: 'auto', overflow: 'hidden' });
         const h = document.createElement('h3');
         h.textContent = existing ? 'Taak bewerken' : 'Nieuwe taak';
-        h.style.cssText = 'margin:0;font-size:16px;';
+        h.style.cssText = 'margin:0;font-size:16px;flex-shrink:0;';
         modal.appendChild(h);
         const bodyScroll = document.createElement('div');
-        Object.assign(bodyScroll.style, { display: 'flex', flexDirection: 'column', gap: '10px' });
+        Object.assign(bodyScroll.style, { display: 'flex', flexDirection: 'column', gap: '10px', flex: '1 1 auto', minHeight: '0', overflowY: 'scroll', overflowX: 'hidden', paddingRight: '6px', maxHeight: 'calc(100vh - 210px)', scrollbarWidth: 'thin', scrollbarColor: 'var(--egd-rand) var(--egd-veld)', overscrollBehavior: 'contain' });
+        bodyScroll.tabIndex = 0;
         modal.appendChild(bodyScroll);
 
         function field(label, node) {
@@ -996,7 +1015,7 @@
         const save = document.createElement('button');
         save.type = 'button'; save.textContent = existing ? 'Opslaan' : 'Toevoegen';
         Object.assign(save.style, { padding: '8px 12px', border: 'none', borderRadius: '4px', background: 'var(--egd-accent)', color: 'var(--egd-accent-tekst)', cursor: 'pointer', fontWeight: 'bold' });
-        save.addEventListener('click', function () {
+        save.addEventListener('click', async function () {
             const titleVal = titleInput.value.trim();
             if (!titleVal) { ui.toast('Titel is verplicht.', { type: 'error' }); return; }
             const patch = {
@@ -1008,22 +1027,30 @@
                 assignees: Array.from(selectedAssignees),
                 blockedReason: blockedInput.value.trim() || null
             };
-            if (existing) {
-                T.updateTask(challengeId, existing.id, patch);
-            } else {
-                const subs = (subtasksInput && subtasksInput.value.trim()) ? subtasksInput.value.trim().split('\n').filter(function (l) { return l.trim(); }).map(function (l, i) { return { id: 's-' + Date.now() + '-' + i, title: l.trim(), done: false, assignee: null, order: i, createdAt: Date.now() }; }) : [];
-                const user = (allUsers().find(function (u) { return u.id === meId; })) || {};
-                const task = Object.assign({}, patch, {
-                    subtasks: subs,
-                    order: getTasks(challengeId).length,
-                    createdBy: meId,
-                    createdByName: user.name || user.firstName || 'Onbekend',
-                    updatedBy: meId,
-                    updatedByName: user.name || user.firstName || 'Onbekend'
-                });
-                T.createTask(challengeId, task);
+            save.disabled = true;
+            try {
+                if (existing) {
+                    await T.updateTask(challengeId, existing.id, patch);
+                } else {
+                    const subs = (subtasksInput && subtasksInput.value.trim()) ? subtasksInput.value.trim().split('\n').filter(function (l) { return l.trim(); }).map(function (l, i) { return { id: 's-' + Date.now() + '-' + i, title: l.trim(), done: false, assignee: null, order: i, createdAt: Date.now() }; }) : [];
+                    const user = (allUsers().find(function (u) { return u.id === meId; })) || {};
+                    const task = Object.assign({}, patch, {
+                        subtasks: subs,
+                        order: getTasks(challengeId).length,
+                        createdBy: meId,
+                        createdByName: user.name || user.firstName || 'Onbekend',
+                        updatedBy: meId,
+                        updatedByName: user.name || user.firstName || 'Onbekend'
+                    });
+                    await T.createTask(challengeId, task);
+                }
+            } catch (err) {
+                save.disabled = false;
+                ui.toast('Opslaan mislukt: ' + ((err && err.message) || err), { type: 'error' });
+                return;
             }
             closeEditor();
+            refreshBody();
         });
         btns.append(cancel, save);
         modal.appendChild(btns);
@@ -1038,16 +1065,20 @@
             backdrop.remove();
         }
         // The host page can block wheel scrolling while a modal is open.
-        // Scroll the backdrop manually so the form always scrolls.
+        // Scroll the form body ourselves so it always scrolls.
+        function scrollTarget() {
+            return (bodyScroll.scrollHeight > bodyScroll.clientHeight + 1) ? bodyScroll : backdrop;
+        }
         function onWheel(e) {
             if (!document.body.contains(backdrop)) {
                 window.removeEventListener('wheel', onWheel, true);
                 return;
             }
             if (!backdrop.contains(e.target)) return;
-            const before = backdrop.scrollTop;
-            backdrop.scrollTop = before + e.deltaY;
-            if (backdrop.scrollTop !== before) e.preventDefault();
+            const sc = scrollTarget();
+            const before = sc.scrollTop;
+            sc.scrollTop = before + e.deltaY;
+            if (sc.scrollTop !== before) e.preventDefault();
         }
         window.addEventListener('wheel', onWheel, { capture: true, passive: false });
 
@@ -1055,9 +1086,10 @@
         backdrop.addEventListener('keydown', function (e) {
             if (e.key === 'Escape') { closeEditor(); return; }
             const tag = (e.target && e.target.tagName) || '';
-            if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-            if (e.key === 'PageDown') backdrop.scrollTop += 200;
-            if (e.key === 'PageUp') backdrop.scrollTop -= 200;
+            if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'BUTTON') return;
+            const sc = scrollTarget();
+            if (e.key === 'PageDown') sc.scrollTop += 200;
+            if (e.key === 'PageUp') sc.scrollTop -= 200;
         });
         setTimeout(function () { titleInput.focus(); }, 50);
     }
@@ -1123,6 +1155,13 @@
 
     // ---------- open handlers ----------
     L.hamburger.onOpen(ADDON_ID + ':main', function () { openMain(); });
+
+    // Any transport write that had to fall back to local storage is
+    // surfaced instead of silently losing the change.
+    window.addEventListener('egodact:group:error', function (e) {
+        const msg = (e && e.detail && e.detail.message) ? String(e.detail.message) : 'onbekende fout';
+        ui.toast('Synchronisatie mislukt: ' + msg.slice(0, 160), { type: 'error' });
+    });
 
     // kick off loading challenges in background
     ensureLoaded().catch(function () {});
