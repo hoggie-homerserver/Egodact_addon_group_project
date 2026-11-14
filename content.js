@@ -431,10 +431,29 @@
 
     // ---------- projects view ----------
     function renderProjects(body) {
-        const gcs = groupChallenges();
+        const showDone = localStorage.getItem('egodact_group_show_done') === '1';
+        const toggleWrap = document.createElement('div');
+        Object.assign(toggleWrap.style, { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' });
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = showDone;
+        cb.id = 'gp-show-done';
+        const lbl = document.createElement('label');
+        lbl.htmlFor = 'gp-show-done';
+        lbl.textContent = 'Toon afgeronde projecten';
+        lbl.style.cssText = 'font-size:12px;color:var(--egd-tekst-zacht);cursor:pointer;';
+        cb.addEventListener('change', function () {
+            try { localStorage.setItem('egodact_group_show_done', cb.checked ? '1' : '0'); } catch (e) {}
+            refreshBody();
+        });
+        toggleWrap.append(cb, lbl);
+        body.appendChild(toggleWrap);
+
+        let gcs = groupChallenges();
+        if (!showDone) gcs = gcs.filter(function (c) { return c.phase !== 'DONE'; });
         if (!gcs.length) {
             const empty = document.createElement('div');
-            empty.textContent = 'Geen groepschallenges gevonden (challenges met minstens 2 leden).';
+            empty.textContent = showDone ? 'Geen groepschallenges gevonden (challenges met minstens 2 leden).' : 'Geen actieve groepschallenges. Zet "Toon afgeronde projecten" aan om afgeronde te zien.';
             empty.style.cssText = 'padding:20px;text-align:center;color:var(--egd-tekst-zacht);';
             body.appendChild(empty);
             return;
