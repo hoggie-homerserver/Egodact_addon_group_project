@@ -71,17 +71,61 @@
     }
 
     function findAuth0Name() {
-        for (let i = 0; i < localStorage.length; i++) {
-            const k = localStorage.key(i);
-            if (!k || k.indexOf('_CACHE_0') === -1) continue;
-            try {
-                const v = JSON.parse(localStorage.getItem(k));
-                const idt = (v && (v.id_token || (v.body && v.body.id_token) || (v.token && v.token.id_token)));
-                if (idt) {
-                    const p = decodeJwt(idt);
-                    if (p) return p.name || p.given_name || p.email || null;
-                }
-            } catch (e) {}
+        const looksLikeJwt = function (v) {
+            return typeof v === 'string' && /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(v);
+        };
+        const candidates = [];
+        try {
+            for (let i = 0; i < localStorage.length; i++) {
+                const k = localStorage.key(i);
+                if (k) candidates.push(k);
+            }
+        } catch (e) {}
+        const jwts = [];
+        let cacheObj = null;
+        for (const k of candidates) {
+            let raw = null;
+            try { raw = localStorage.getItem(k); } catch (e) { continue; }
+            if (!raw) continue;
+            if (looksLikeJwt(raw)) {
+                const claims = decodeJwt(raw);
+                if (claims) jwts.push({ token: raw, claims: claims });
+                continue;
+            }
+            if (raw.charAt(0) !== '{' && raw.charAt(0) !== '[') continue;
+            let parsed = null;
+            try { parsed = JSON.parse(raw); } catch (e) { continue; }
+            const tokens = [parsed, parsed && parsed.body, parsed && parsed.user, parsed && parsed.profile, parsed && parsed.token];
+            for (const obj of tokens) {
+                if (!obj || typeof obj !== 'object') continue;
+                if (looksLikeJwt(obj.id_token)) { const c = decodeJwt(obj.id_token); if (c) jwts.push({ token: obj.id_token, claims: c }); }
+                if (looksLikeJwt(obj.idToken)) { const c = decodeJwt(obj.idToken); if (c) jwts.push({ token: obj.idToken, claims: c }); }
+                if (!cacheObj && (obj.name || obj.email || obj.given_name || obj.nickname)) cacheObj = obj;
+            }
+        }
+        // Pick best JWT: prefer one with name/email/picture.
+        let best = null, bestScore = -1;
+        for (const j of jwts) {
+            const c = j.claims || {};
+            let score = 0;
+            if (c.name || c.given_name || c.nickname || c.preferred_username) score += 2;
+            if (c.email) score += 2;
+            if (c.picture) score += 1;
+            if (score > bestScore) { bestScore = score; best = j; }
+        }
+        if (best && best.claims) {
+            const c = best.claims;
+            if (c.name) return String(c.name);
+            if (c.given_name || c.family_name) return [c.given_name, c.family_name].filter(Boolean).join(' ');
+            if (c.nickname) return String(c.nickname);
+            if (c.preferred_username) return String(c.preferred_username);
+            if (c.email) return String(c.email).split('@')[0];
+        }
+        if (cacheObj) {
+            if (cacheObj.name) return String(cacheObj.name);
+            if (cacheObj.given_name) return String(cacheObj.given_name);
+            if (cacheObj.nickname) return String(cacheObj.nickname);
+            if (cacheObj.email) return String(cacheObj.email).split('@')[0];
         }
         return null;
     }
@@ -103,12 +147,21 @@
         if (cached && users.some(function (u) { return u.id === cached; })) { meId = cached; return meId; }
         const name = findAuth0Name();
         if (name) {
-            const exact = users.find(function (u) { return u.name === name; });
+            const nl = name.toLowerCase();
+            const exact = users.find(function (u) { return (u.name || '').toLowerCase() === nl; });
             if (exact) { meId = exact.id; localStorage.setItem('egodact_group_me', meId); return meId; }
-            const first = name.split(' ')[0];
-            const fuzzy = users.find(function (u) { return (u.firstName || '').toLowerCase() === first.toLowerCase() || (u.name || '').split(' ')[0].toLowerCase() === first.toLowerCase(); });
+            const first = name.split(' ')[0].toLowerCase();
+            const fuzzy = users.find(function (u) { return (u.firstName || '').toLowerCase() === first || (u.name || '').toLowerCase().split(' ')[0] === first; });
             if (fuzzy) { meId = fuzzy.id; localStorage.setItem('egodact_group_me', meId); return meId; }
+            // email local-part match
+            const emailName = name.indexOf('@') !== -1 ? name.split('@')[0].toLowerCase() : null;
+            if (emailName) {
+                const em = users.find(function (u) { return (u.name || '').toLowerCase().split(' ')[0] === emailName; });
+                if (em) { meId = em.id; localStorage.setItem('egodact_group_me', meId); return meId; }
+            }
         }
+        // If only one user across all group challenges, auto-select.
+        if (users.length === 1) { meId = users[0].id; localStorage.setItem('egodact_group_me', meId); return meId; }
         return null;
     }
 
