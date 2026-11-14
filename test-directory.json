@@ -1,4 +1,8 @@
 {
+  "users": {
+    "501": { "id": 501, "name": "Max Jansen", "firstName": "Max", "picture": "" },
+    "502": { "id": 502, "name": "Bram de Vries", "firstName": "Bram", "picture": "" }
+  },
   "challenges": {
     "challenge-1": {
       "name": "Wiskunde project",
@@ -15,10 +19,36 @@
       "name": "Voetenprinten Arcade Game 2026",
       "phase": "IN_PROGRESS",
       "color": "#379e00",
-      "users": [
+      "participants": [
         { "id": 101, "name": "Anna Test", "firstName": "Anna", "picture": "" },
         { "id": 102, "name": "Bram de Vries", "firstName": "Bram", "picture": "" }
       ]
+    },
+    "9001": {
+      "name": "Project zonder leden-ids",
+      "phase": "IN_PROGRESS",
+      "users": [
+        { "name": "Max Jansen", "firstName": "Max" },
+        { "name": "Bram de Vries", "firstName": "Bram" }
+      ]
+    },
+    "9002": {
+      "name": "Project met alleen ids",
+      "phase": "IN_PROGRESS",
+      "members": ["501", "502"]
+    },
+    "9003": {
+      "name": "Team-veld (auto-detect)",
+      "phase": "IN_PROGRESS",
+      "team": [
+        { "userId": "t1", "fullName": "Chloe Jansen", "givenName": "Chloe" },
+        { "userId": "t2", "fullName": "Max Jansen", "givenName": "Max" }
+      ]
+    },
+    "9004": {
+      "name": "Geen leden (pool fallback)",
+      "phase": "IN_PROGRESS",
+      "goal": "test"
     }
   },
   "rows": {}

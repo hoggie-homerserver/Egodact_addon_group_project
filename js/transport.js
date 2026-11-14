@@ -255,6 +255,78 @@
         return parseChallenges(await r.json());
     }
 
+    // ---------- member normalisation ----------
+    // The Egodact API is not consistent: members live under different keys
+    // (users, participants, members, ...), can be an array or an object, and
+    // sometimes have no id at all. The Chat addon solves this by deriving a
+    // stable id from the name; we use the exact same scheme so ids line up.
+    const USER_FIELDS = ['users', 'participants', 'members', 'students', 'leerlingen', 'deelnemers', 'classmates', 'people'];
+
+    function slug(value) {
+        return String(value == null ? '' : value).trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+    }
+
+    function normalizeUser(raw, fallbackId) {
+        if (raw == null) return null;
+        if (typeof raw === 'string' || typeof raw === 'number') {
+            return { id: String(raw), name: String(raw), firstName: String(raw), picture: '', email: '' };
+        }
+        if (typeof raw !== 'object') return null;
+        const id = raw.id || raw.userId || raw.uuid || raw._id || raw.user_id || raw.uid
+            || raw.accountId || raw.studentId || raw.key || fallbackId;
+        const email = raw.email || raw.mail || raw.userEmail || raw.schoolEmail || raw.contactEmail || '';
+        const name = raw.name || raw.fullName || raw.displayName || raw.username
+            || [raw.firstName, raw.lastName].filter(Boolean).join(' ') || raw.firstName || email || '';
+        if (id == null && !name) return null;
+        const userId = (id != null && String(id).trim()) ? String(id) : ('u_' + slug(name));
+        if (!userId) return null;
+        return {
+            id: userId,
+            name: String(name || 'Onbekend'),
+            firstName: String(raw.firstName || raw.givenName || name || '').split(/\s+/)[0] || 'Onbekend',
+            picture: raw.picture || raw.avatar || raw.photo || raw.image || raw.photoUrl || '',
+            email: String(email || '')
+        };
+    }
+
+    function looksLikeUser(raw) {
+        return !!raw && typeof raw === 'object'
+            && !!(raw.id || raw.userId || raw.uuid || raw.name || raw.firstName || raw.email || raw.picture);
+    }
+
+    function membersOf(c) {
+        const out = [];
+        const seen = {};
+        function add(raw, fallbackId) {
+            const u = normalizeUser(raw, fallbackId);
+            if (!u || seen[u.id]) return;
+            seen[u.id] = true;
+            out.push(u);
+        }
+        if (!c || typeof c !== 'object') return out;
+        USER_FIELDS.forEach(function (field) {
+            const v = c[field];
+            if (Array.isArray(v)) v.forEach(function (raw) { add(raw); });
+            else if (v && typeof v === 'object') Object.keys(v).forEach(function (k) { add(v[k], k); });
+        });
+        if (!out.length) {
+            Object.keys(c).forEach(function (field) {
+                const v = c[field];
+                if (Array.isArray(v) && v.length) {
+                    if (!looksLikeUser(v[0])) return;
+                    v.forEach(function (raw) { add(raw); });
+                } else if (v && typeof v === 'object' && !Array.isArray(v)) {
+                    // Object map of users, e.g. { "anna": { name, ... } }
+                    const vals = Object.keys(v).map(function (k) { return v[k]; });
+                    if (vals.length && vals.every(function (x) { return x && typeof x === 'object'; }) && (looksLikeUser(vals[0]) || vals[0].name)) {
+                        Object.keys(v).forEach(function (k) { add(v[k], k); });
+                    }
+                }
+            });
+        }
+        return out;
+    }
+
     function parseChallenges(data) {
         const challenges = data.challenges || {};
         const rows = Object.values(data.rows || {}).sort(function (a, b) { return (b.position || 0) - (a.position || 0); });
@@ -265,6 +337,56 @@
                 if (!rowVan.has(key)) rowVan.set(key, { naam: rij.name || '', index: index });
             });
         });
+
+        // Pool of every user we can see anywhere in the payload, keyed by id.
+        // Challenge member lists sometimes only contain ids; this fills in
+        // names/photos so assignment stays understandable.
+        const pool = new Map();
+        function poolAdd(u) {
+            if (!u || !u.id) return;
+            const existing = pool.get(u.id);
+            if (!existing) { pool.set(u.id, u); return; }
+            if ((!existing.name || existing.name === existing.id) && u.name && u.name !== u.id) {
+                existing.name = u.name;
+                if (!existing.firstName || existing.firstName === existing.id) existing.firstName = u.firstName;
+            }
+            if (!existing.picture && u.picture) existing.picture = u.picture;
+            if (!existing.email && u.email) existing.email = u.email;
+        }
+        Object.keys(challenges).forEach(function (key) { membersOf(challenges[key] || {}).forEach(poolAdd); });
+        // Top-level user directories under any common field name.
+        USER_FIELDS.forEach(function (field) {
+            const v = data[field];
+            if (Array.isArray(v)) v.forEach(function (raw) { poolAdd(normalizeUser(raw)); });
+            else if (v && typeof v === 'object') Object.keys(v).forEach(function (k) { poolAdd(normalizeUser(v[k], k)); });
+        });
+        // Auto-detect any top-level array/object of user-like entries.
+        Object.keys(data || {}).forEach(function (key) {
+            if (key === 'challenges' || key === 'rows') return;
+            const v = data[key];
+            if (Array.isArray(v) && v.length && looksLikeUser(v[0])) {
+                v.forEach(function (raw) { poolAdd(normalizeUser(raw)); });
+            } else if (v && typeof v === 'object' && !Array.isArray(v)) {
+                const vals = Object.values(v);
+                if (vals.length && vals.every(function (x) { return x && typeof x === 'object'; }) && (looksLikeUser(vals[0]))) {
+                    Object.keys(v).forEach(function (k) { poolAdd(normalizeUser(v[k], k)); });
+                }
+            }
+        });
+        function enrich(list) {
+            return list.map(function (u) {
+                const known = pool.get(String(u.id));
+                if (!known) return u;
+                const nameIsId = !u.name || u.name === u.id;
+                const firstIsId = !u.firstName || u.firstName === u.id;
+                return Object.assign({}, u, {
+                    name: nameIsId && known.name ? known.name : u.name,
+                    firstName: firstIsId && known.firstName ? known.firstName : u.firstName,
+                    picture: u.picture || known.picture,
+                    email: u.email || known.email
+                });
+            });
+        }
         return Object.keys(challenges).map(function (key) {
             const c = challenges[key] || {};
             // Firestore document ids must be strings. The Egodact API can
@@ -273,6 +395,8 @@
             // so fall back to the map key.
             const id = (c.id != null) ? String(c.id)
                 : ((c.challengeId != null) ? String(c.challengeId) : String(key));
+            let users = membersOf(c);
+            if (!users.length) users = Array.from(pool.values());
             return {
                 id: id,
                 name: c.name || c.title || c.challengeName || c.displayName || 'Naamloze challenge',
@@ -280,9 +404,7 @@
                 phase: c.phase || 'TODO',
                 row: (rowVan.get(id) || {}).naam || '',
                 rowIndex: rowVan.has(id) ? rowVan.get(id).index : 999,
-                users: (c.users || []).map(function (u) {
-                    return Object.assign({}, u, { id: (u && u.id != null) ? String(u.id) : '' });
-                }),
+                users: enrich(users),
                 worlds: c.worlds || [],
                 endDate: c.plannedEndDate || null,
                 raw: c

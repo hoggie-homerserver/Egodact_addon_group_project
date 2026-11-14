@@ -15,7 +15,7 @@
     const SUGGESTED_ROLES = (C.suggestedRoles || ['Leider', 'Schrijver', 'Onderzoeker', 'Presentator', 'Vormgever', 'Notulist', 'Tester']);
 
     const ADDON_ID = 'egodact-group-project';
-    const VERSION = '0.1.4';
+    const VERSION = '0.1.5';
 
     client.registerAddon({
         id: ADDON_ID,
@@ -136,10 +136,68 @@
         const map = {};
         challenges.forEach(function (c) {
             (c.users || []).forEach(function (u) {
-                if (u && u.id && !map[u.id]) map[u.id] = { id: u.id, name: u.name, firstName: u.firstName, picture: u.picture };
+                if (u && u.id && !map[u.id]) map[u.id] = { id: u.id, name: u.name, firstName: u.firstName, picture: u.picture, email: u.email };
             });
         });
         return Object.values(map);
+    }
+
+    function normName(value) {
+        return String(value || '').trim().toLowerCase();
+    }
+
+    let meNameCache;
+    function myAuthName() {
+        if (meNameCache === undefined) meNameCache = findAuth0Name() || '';
+        return meNameCache;
+    }
+
+    // Every member id that belongs to me. Member data can differ between
+    // challenges (some have no ids at all), so also match on my name.
+    let meIdsCache = { id: null, key: '', ids: null };
+    function meIds() {
+        const key = challenges.length + ':' + allUsers().length;
+        if (meIdsCache.id === meId && meIdsCache.key === key && meIdsCache.ids) return meIdsCache.ids;
+        const ids = new Set();
+        if (meId != null) ids.add(String(meId));
+        const mine = allUsers().find(function (u) { return String(u.id) === String(meId); });
+        const names = new Set();
+        // Only the resolved member's own name: the Auth0 name can be a
+        // nickname or stale, and matching on it added other people's ids.
+        [mine && mine.name, mine && mine.firstName].forEach(function (n) {
+            const v = normName(n);
+            if (v) names.add(v);
+        });
+        if (names.size) {
+            challenges.forEach(function (c) {
+                (c.users || []).forEach(function (u) {
+                    if (!u || u.id == null) return;
+                    if (names.has(normName(u.name))) ids.add(String(u.id));
+                });
+            });
+        }
+        meIdsCache = { id: meId, key: key, ids: ids };
+        return ids;
+    }
+
+    function isAssignedToMe(t, c) {
+        const ids = meIds();
+        return normalizeAssignees(t, c).some(function (a) { return ids.has(a); });
+    }
+
+    // My member entry within one challenge (may have another id than meId).
+    function myMemberIn(c) {
+        const users = challengeUsers(c);
+        const ids = meIds();
+        const hit = users.find(function (u) { return ids.has(String(u.id)); });
+        if (hit) return hit;
+        const mine = allUsers().find(function (u) { return String(u.id) === String(meId); });
+        const myName = normName((mine && mine.name) || myAuthName());
+        if (myName) {
+            const byName = users.filter(function (u) { return normName(u.name) === myName; });
+            if (byName.length === 1) return byName[0];
+        }
+        return null;
     }
 
     function resolveMe() {
@@ -201,11 +259,17 @@
     function challengeUsers(c) {
         const list = [];
         const seen = {};
+        const seenNames = {};
         ((c && c.users) || []).forEach(function (u) {
             if (!u) return;
             const id = (u.id != null) ? String(u.id) : '';
             if (!id || seen[id]) return;
+            // The same person can arrive under several ids (fallback pool);
+            // show each name only once so the list stays usable.
+            const nameKey = normName(u.name || u.firstName);
+            if (nameKey && seenNames[nameKey]) return;
             seen[id] = true;
+            if (nameKey) seenNames[nameKey] = true;
             list.push(u);
         });
         return list;
@@ -397,8 +461,16 @@
         });
     }
 
-    function showMePicker() {
-        const users = allUsers();
+    function showMePicker(after) {
+        // The same person can have different ids in different challenges;
+        // show each name once.
+        const seen = {};
+        const users = allUsers().filter(function (u) {
+            const key = normName(u.name) || String(u.id);
+            if (seen[key]) return false;
+            seen[key] = true;
+            return true;
+        });
         const backdrop = document.createElement('div');
         backdrop.id = 'egodact-custom-modal-backdrop';
         Object.assign(backdrop.style, { position: 'fixed', top: '0', left: '0', width: '100vw', height: '100vh', backgroundColor: 'var(--egd-backdrop)', zIndex: '9999999', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Arial, sans-serif', overflow: 'auto', padding: '16px 0' });
@@ -417,10 +489,11 @@
             nm.style.fontWeight = 'bold';
             btn.appendChild(nm);
             btn.addEventListener('click', function () {
-                meId = u.id;
+                meId = String(u.id);
+                meIdsCache = { id: null, key: '', ids: null };
                 localStorage.setItem('egodact_group_me', meId);
                 backdrop.remove();
-                openMain();
+                if (typeof after === 'function') after(); else openMain();
             });
             list.appendChild(btn);
         });
@@ -470,7 +543,12 @@
             b.textContent = label;
             b.dataset.tab = key;
             Object.assign(b.style, { padding: '8px 14px', border: 'none', background: 'transparent', color: 'var(--egd-tekst)', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold', borderBottom: '2px solid transparent', marginBottom: '-1px' });
-            b.addEventListener('click', function () { currentTab = key; if (key === 'projects') selectedId = null; refreshBody(); updateTabs(); });
+            b.addEventListener('click', function () {
+                currentTab = key;
+                if (key !== 'board') selectedId = null;
+                refreshBody();
+                updateTabs();
+            });
             return b;
         }
         const tabProjects = makeTab('projects', 'Projecten');
@@ -504,9 +582,9 @@
         const body = currentBackdrop.querySelector('#gp-body');
         if (!body) return;
         body.innerHTML = '';
-        if (currentTab === 'projects' && !selectedId) renderProjects(body);
-        else if (currentTab === 'board' || selectedId) { currentTab = 'board'; renderBoard(body); }
-        else if (currentTab === 'mytasks') renderMyTasks(body);
+        if (currentTab === 'mytasks') renderMyTasks(body);
+        else if (currentTab === 'board') renderBoard(body);
+        else if (selectedId) renderBoard(body);
         else renderProjects(body);
         updateTabs();
     }
@@ -722,7 +800,7 @@
                 if (f === 'all') return true;
                 if (f === 'done') return t.status === 'done';
                 if (f === 'todo') return t.status !== 'done';
-                if (f === 'mine') return normalizeAssignees(t, c).indexOf((meId == null) ? '' : String(meId)) !== -1;
+                if (f === 'mine') return isAssignedToMe(t, c);
                 if (f === 'unassigned') return normalizeAssignees(t, c).length === 0;
                 return true;
             });
@@ -1060,8 +1138,9 @@
         const knownIds = {};
         memberList.forEach(function (u) { knownIds[String(u.id)] = true; });
         // Only preselect yourself when you are actually a member of this
-        // challenge (ids can differ between challenge payloads).
-        const defaultMe = (meId != null && knownIds[String(meId)]) ? [String(meId)] : [];
+        // challenge (member ids can differ between challenges).
+        const myMember = myMemberIn(c);
+        const defaultMe = myMember ? [String(myMember.id)] : [];
         const selectedAssignees = new Set(existing ? normalizeAssignees(existing, c) : defaultMe);
         // Keep assignments to people who are no longer in the member list
         // visible (and removable) instead of dropping them on the next save.
@@ -1198,11 +1277,27 @@
 
     // ---------- my tasks view ----------
     function renderMyTasks(body) {
+        // Who am I? Show it, and let the user correct it — with synthesized
+        // member ids a wrong guess would otherwise hide every task.
+        const meUser = allUsers().find(function (u) { return String(u.id) === String(meId); })
+            || { name: myAuthName() || 'onbekend' };
+        const who = document.createElement('div');
+        Object.assign(who.style, { display: 'flex', alignItems: 'center', gap: '8px', padding: '0 2px 8px', fontSize: '12px', color: 'var(--egd-tekst-zacht)', flexWrap: 'wrap' });
+        const whoTxt = document.createElement('span');
+        whoTxt.textContent = 'Taken van: ' + (meUser.name || 'onbekend');
+        const whoBtn = document.createElement('button');
+        whoBtn.type = 'button';
+        whoBtn.textContent = 'Wijzigen';
+        Object.assign(whoBtn.style, { padding: '3px 8px', border: '1px solid var(--egd-rand)', borderRadius: '4px', background: 'transparent', color: 'var(--egd-tekst)', cursor: 'pointer', fontSize: '11px' });
+        whoBtn.addEventListener('click', function () { showMePicker(function () { refreshBody(); }); });
+        who.append(whoTxt, whoBtn);
+        body.appendChild(who);
+
         const gcs = groupChallenges();
         const all = [];
         gcs.forEach(function (c) {
             getTasks(c.id).forEach(function (t) {
-                if (meId != null && normalizeAssignees(t, c).indexOf(String(meId)) !== -1) all.push({ challenge: c, task: t });
+                if (isAssignedToMe(t, c)) all.push({ challenge: c, task: t });
             });
         });
         all.sort(function (a, b) {
