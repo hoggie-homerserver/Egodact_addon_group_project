@@ -1,0 +1,31 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Group checklists: one document per Egodact challenge.
+    match /groupchecklists/{challengeId} {
+      allow read: if request.auth != null;
+      allow create, update: if request.auth != null
+        && request.resource.data.keys().hasAll(['challengeId'])
+        && request.resource.data.challengeId == challengeId;
+      allow delete: if request.auth != null;
+
+      // Tasks subcollection.
+      match /tasks/{taskId} {
+        allow read: if request.auth != null;
+        allow create: if request.auth != null
+          && request.resource.data.keys().hasAll(['title', 'status'])
+          && request.resource.data.title is string
+          && request.resource.data.title.size() > 0
+          && request.resource.data.title.size() <= 200
+          && request.resource.data.status in ['todo', 'doing', 'done', 'blocked'];
+        allow update: if request.auth != null
+          && request.resource.data.title is string
+          && request.resource.data.title.size() > 0
+          && request.resource.data.title.size() <= 200
+          && request.resource.data.status in ['todo', 'doing', 'done', 'blocked'];
+        allow delete: if request.auth != null;
+      }
+    }
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "Egodact Addon: Group Project",
+  "version": "0.1.0",
+  "description": "Shared task checklists for group challenges in Egodact.",
+  "content_scripts": [
+    {
+      "matches": ["https://app.egodact.com/*"],
+      "js": [
+        "sdk.js",
+        "lib.js",
+        "vendor/firebase-app-compat.js",
+        "vendor/firebase-auth-compat.js",
+        "vendor/firebase-firestore-compat.js",
+        "config.js",
+        "js/store.js",
+        "js/transport.js",
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "host_permissions": [
+    "https://api.egodact.com/*"
+  ]
+}
