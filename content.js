@@ -888,11 +888,14 @@
         backdrop.id = 'egodact-custom-modal-backdrop';
         Object.assign(backdrop.style, { position: 'fixed', top: '0', left: '0', width: '100vw', height: '100vh', backgroundColor: 'var(--egd-backdrop)', zIndex: '10000000', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Arial, sans-serif' });
         const modal = document.createElement('div');
-        Object.assign(modal.style, { backgroundColor: 'var(--egd-modal)', color: 'var(--egd-tekst)', width: 'min(460px, calc(100vw - 32px))', maxHeight: 'calc(100vh - 32px)', boxSizing: 'border-box', overflow: 'auto', borderRadius: '6px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '10px', boxShadow: 'var(--egd-schaduw)' });
+        Object.assign(modal.style, { backgroundColor: 'var(--egd-modal)', color: 'var(--egd-tekst)', width: 'min(460px, calc(100vw - 32px))', maxHeight: 'calc(100vh - 32px)', boxSizing: 'border-box', overflow: 'hidden', borderRadius: '6px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '10px', boxShadow: 'var(--egd-schaduw)' });
         const h = document.createElement('h3');
         h.textContent = existing ? 'Taak bewerken' : 'Nieuwe taak';
         h.style.cssText = 'margin:0;font-size:16px;';
         modal.appendChild(h);
+        const bodyScroll = document.createElement('div');
+        Object.assign(bodyScroll.style, { flex: '1', minHeight: '0', overflowY: 'auto', paddingRight: '4px', display: 'flex', flexDirection: 'column', gap: '10px' });
+        modal.appendChild(bodyScroll);
 
         function field(label, node) {
             const w = document.createElement('div');
@@ -908,14 +911,14 @@
         titleInput.value = existing ? existing.title : '';
         titleInput.placeholder = 'Titel';
         Object.assign(titleInput.style, { width: '100%', boxSizing: 'border-box', padding: '8px', border: '1px solid var(--egd-rand)', borderRadius: '4px', background: 'var(--egd-veld)', color: 'var(--egd-tekst)' });
-        modal.appendChild(field('Titel', titleInput));
+        bodyScroll.appendChild(field('Titel', titleInput));
 
         const descInput = document.createElement('textarea');
         descInput.rows = 3;
         descInput.value = existing ? (existing.description || '') : '';
         descInput.placeholder = 'Beschrijving (optioneel)';
         Object.assign(descInput.style, { width: '100%', boxSizing: 'border-box', padding: '8px', border: '1px solid var(--egd-rand)', borderRadius: '4px', background: 'var(--egd-veld)', color: 'var(--egd-tekst)', resize: 'vertical', fontFamily: 'inherit' });
-        modal.appendChild(field('Beschrijving', descInput));
+        bodyScroll.appendChild(field('Beschrijving', descInput));
 
         // status
         const statusSel = document.createElement('select');
@@ -926,7 +929,7 @@
             statusSel.appendChild(o);
         });
         statusSel.value = existing ? existing.status : 'todo';
-        modal.appendChild(field('Status', statusSel));
+        bodyScroll.appendChild(field('Status', statusSel));
 
         // priority
         const prioSel = document.createElement('select');
@@ -937,14 +940,14 @@
             prioSel.appendChild(o);
         });
         prioSel.value = existing ? (existing.priority || 'low') : 'low';
-        modal.appendChild(field('Prioriteit', prioSel));
+        bodyScroll.appendChild(field('Prioriteit', prioSel));
 
         // due date
         const dueInput = document.createElement('input');
         dueInput.type = 'date';
         dueInput.value = existing ? (existing.dueDate || '') : '';
         Object.assign(dueInput.style, { width: '100%', boxSizing: 'border-box', padding: '8px', border: '1px solid var(--egd-rand)', borderRadius: '4px', background: 'var(--egd-veld)', color: 'var(--egd-tekst)' });
-        modal.appendChild(field('Deadline', dueInput));
+        bodyScroll.appendChild(field('Deadline', dueInput));
 
         // assignees
         const assignWrap = document.createElement('div');
@@ -964,7 +967,7 @@
             lbl.appendChild(nm);
             assignWrap.appendChild(lbl);
         });
-        modal.appendChild(field('Toewijzen aan', assignWrap));
+        bodyScroll.appendChild(field('Toewijzen aan', assignWrap));
 
         // subtasks (initial, only on create, simple textarea)
         let subtasksInput = null;
@@ -973,7 +976,7 @@
             subtasksInput.rows = 3;
             subtasksInput.placeholder = 'Subtaken (één per regel, optioneel)';
             Object.assign(subtasksInput.style, { width: '100%', boxSizing: 'border-box', padding: '8px', border: '1px solid var(--egd-rand)', borderRadius: '4px', background: 'var(--egd-veld)', color: 'var(--egd-tekst)', resize: 'vertical', fontFamily: 'inherit' });
-            modal.appendChild(field('Subtaken', subtasksInput));
+            bodyScroll.appendChild(field('Subtaken', subtasksInput));
         }
 
         // blocked reason
@@ -982,7 +985,7 @@
         blockedInput.value = existing ? (existing.blockedReason || '') : '';
         blockedInput.placeholder = 'Reden (bij geblokkeerd)';
         Object.assign(blockedInput.style, { width: '100%', boxSizing: 'border-box', padding: '8px', border: '1px solid var(--egd-rand)', borderRadius: '4px', background: 'var(--egd-veld)', color: 'var(--egd-tekst)' });
-        modal.appendChild(field('Geblokkeerd-reden', blockedInput));
+        bodyScroll.appendChild(field('Geblokkeerd-reden', blockedInput));
 
         const btns = document.createElement('div');
         Object.assign(btns.style, { display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '6px' });
