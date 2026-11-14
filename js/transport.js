@@ -184,7 +184,8 @@
         // direct fallback
         const headers = { 'Authorization': 'Bearer ' + (token || ''), 'Accept': 'application/json' };
         if (school) headers['School'] = school;
-        const r = await fetch((cfg.apiBase || 'https://api.egodact.com') + (cfg.challengePath || '/challenge-portfolio'), { method: 'GET', headers: headers, credentials: 'omit' });
+        const base = (cfg.apiBase == null) ? 'https://api.egodact.com' : cfg.apiBase;
+        const r = await fetch(base + (cfg.challengePath || '/challenge-portfolio'), { method: 'GET', headers: headers, credentials: 'omit' });
         if (!r.ok) throw new Error('API ' + r.status);
         return parseChallenges(await r.json());
     }

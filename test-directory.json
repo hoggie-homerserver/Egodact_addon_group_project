@@ -1,0 +1,23 @@
+{
+  "challenges": {
+    "challenge-1": {
+      "name": "Wiskunde project",
+      "phase": "IN_PROGRESS",
+      "color": "#1976d2",
+      "users": [
+        { "id": "u-anna", "name": "Anna Test", "firstName": "Anna", "picture": "" },
+        { "id": "u-bram", "name": "Bram de Vries", "firstName": "Bram", "picture": "" },
+        { "id": "u-chloe", "name": "Chloe Jansen", "firstName": "Chloe", "picture": "" }
+      ]
+    },
+    "challenge-2": {
+      "name": "Solo challenge",
+      "phase": "TODO",
+      "color": "#379e00",
+      "users": [
+        { "id": "u-anna", "name": "Anna Test", "firstName": "Anna", "picture": "" }
+      ]
+    }
+  },
+  "rows": {}
+}

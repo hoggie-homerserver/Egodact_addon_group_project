@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Group Project — Test Page</title>
+  <style>
+    :root {
+      --egd-modal: #424242; --egd-veld: #2e2e2e; --egd-paneel: #333333; --egd-info: #2b2b2b;
+      --egd-rand: #555555; --egd-lijn: #444444; --egd-tekst: #ffffff; --egd-tekst-zacht: #b0b0b0;
+      --egd-uit: #777777; --egd-accent: #90caf9; --egd-accent-tekst: #0d47a1; --egd-gevaar: #ef5350;
+      --egd-backdrop: rgba(0, 0, 0, .65); --egd-hover: rgba(144, 202, 249, .08);
+      --egd-schaduw: 0 11px 15px -7px rgba(0,0,0,.3), 0 24px 38px 3px rgba(0,0,0,.2);
+      --egd-header-icoon: #ffffff;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Arial, sans-serif; background: var(--egd-veld); color: var(--egd-tekst); min-height: 100vh; }
+    header { display: flex; align-items: center; gap: 12px; padding: 12px 20px; background: var(--egd-modal); border-bottom: 1px solid var(--egd-rand); }
+    header h1 { font-size: 17px; margin: 0; }
+    #host-buttons { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+    .host-btn { background: none; border: none; color: var(--egd-header-icoon); width: 32px; height: 34px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; border-radius: 6px; }
+    .host-btn:hover { background: var(--egd-hover); }
+    main { padding: 28px; max-width: 760px; }
+    main p { color: var(--egd-tekst-zacht); line-height: 1.6; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0; }
+    .tool { padding: 9px 13px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: bold; font-family: inherit; background: var(--egd-paneel); color: var(--egd-tekst); border: 1px solid var(--egd-rand); }
+    .tool.primary { background: var(--egd-accent); color: var(--egd-accent-tekst); border-color: transparent; }
+    .panel { background: var(--egd-paneel); border: 1px solid var(--egd-rand); border-radius: 8px; padding: 16px; }
+    #log { font-size: 12px; color: var(--egd-tekst-zacht); margin-top: 12px; white-space: pre-wrap; max-height: 200px; overflow: auto; }
+  </style>
+</head>
+<body>
+  <header>
+    <strong>Egodact</strong>
+    <h1>Group Project test page</h1>
+    <div id="host-buttons"></div>
+  </header>
+  <main>
+    <div class="panel">
+      <h2 style="margin-top:0;">Addon test harness</h2>
+      <p>Mocks the Egodact host. Check the log for registration events and click "Groepsprojecten" in the header.</p>
+      <div class="toolbar">
+        <button class="tool primary" id="open-group" type="button">Open Groepsprojecten</button>
+        <button class="tool" id="toggle-theme" type="button">Toggle light/dark</button>
+        <button class="tool" id="reset-data" type="button">Reset local data</button>
+      </div>
+      <div id="log"></div>
+    </div>
+  </main>
+
+  <script>
+    (function () {
+      'use strict';
+      window.__egodactHostReady = true;
+      function log(m) { const e = document.getElementById('log'); if (e) e.textContent += m + '\n'; }
+
+      document.addEventListener('egodact:addon:register', function (event) {
+        const detail = event.detail || {};
+        const meta = detail.meta || {};
+        log('register: ' + detail.type + ' ' + (meta.id || meta.title || ''));
+
+        if (detail.type === 'hamburger' || detail.type === 'menu') {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'host-btn';
+          button.title = meta.title || 'Addon';
+          button.innerHTML = meta.icon || '&#8226;';
+          button.addEventListener('click', function () {
+            document.dispatchEvent(new CustomEvent('egodact:addon:open', { detail: { id: meta.id } }));
+          });
+          document.getElementById('host-buttons').appendChild(button);
+        }
+        if (detail.type === 'button') {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'host-btn';
+          button.title = meta.title || 'Addon';
+          button.innerHTML = meta.icon || '&#8226;';
+          button.addEventListener('click', function () {
+            document.dispatchEvent(new CustomEvent('egodact:addon:open', { detail: { id: meta.id } }));
+          });
+          document.getElementById('host-buttons').appendChild(button);
+        }
+      });
+
+      // Fake identity
+      function b64url(text) { return btoa(unescape(encodeURIComponent(text))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); }
+      const TOKEN_KEY = 'pYfkT6ZWcUB98Sla76HppFpk4aYdTAp0_CACHE_0';
+      if (!localStorage.getItem(TOKEN_KEY)) {
+        const header = b64url(JSON.stringify({ alg: 'none', typ: 'JWT' }));
+        const payload = b64url(JSON.stringify({ sub: 'test|anna', name: 'Anna Test', given_name: 'Anna', email: 'anna@test.nl' }));
+        localStorage.setItem(TOKEN_KEY, JSON.stringify({ access_token: 'test-access-token', id_token: header + '.' + payload + '.sig', expires_at: Date.now() + 86400000 }));
+      }
+
+      document.getElementById('open-group').addEventListener('click', function () {
+        document.dispatchEvent(new CustomEvent('egodact:addon:open', { detail: { id: 'egodact-group-project:main' } }));
+      });
+      document.getElementById('toggle-theme').addEventListener('click', function () {
+        const root = document.documentElement;
+        const next = root.getAttribute('data-egodact-thema') === 'licht' ? 'donker' : 'licht';
+        root.setAttribute('data-egodact-thema', next);
+      });
+      document.getElementById('reset-data').addEventListener('click', function () {
+        if (!window.confirm('Reset all local data?')) return;
+        Object.keys(localStorage).forEach(function (key) {
+          if (key.indexOf('egodact_group_') === 0 || key === TOKEN_KEY) localStorage.removeItem(key);
+        });
+        window.location.reload();
+      });
+
+      document.documentElement.setAttribute('data-egodact-thema', 'donker');
+      setTimeout(function () { document.dispatchEvent(new CustomEvent('egodact:host:ready')); }, 0);
+    })();
+  </script>
+
+  <script src="vendor/firebase-app-compat.js"></script>
+  <script src="vendor/firebase-auth-compat.js"></script>
+  <script src="vendor/firebase-firestore-compat.js"></script>
+  <script src="sdk.js?v=2"></script>
+  <script src="lib.js?v=2"></script>
+  <script src="config.js?v=2"></script>
+  <script>
+    window.EgodactGroupConfig.apiBase = '';
+    window.EgodactGroupConfig.challengePath = '/test-directory.json';
+  </script>
+  <script src="js/store.js"></script>
+  <script src="js/transport.js?v=3"></script>
+  <script src="content.js?v=6"></script>
+</body>
+</html>

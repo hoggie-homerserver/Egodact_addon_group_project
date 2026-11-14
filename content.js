@@ -26,7 +26,7 @@
 
     const ICON_SVG = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;pointer-events:none;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>';
 
-    client.registerHamburger({
+    L.hamburger.add({
         addonId: ADDON_ID,
         id: ADDON_ID + ':main',
         title: 'Groepsprojecten',
@@ -34,7 +34,7 @@
         order: 20
     });
 
-    client.registerShortcut({
+    L.shortcuts.add({
         addonId: ADDON_ID,
         id: 'open',
         title: 'Groepsprojecten openen',
@@ -151,6 +151,11 @@
         return wrap;
     }
 
+    function challengeProgress(tasks) {
+        const total = (tasks || []).length;
+        const done = (tasks || []).filter(function (t) { return t.status === 'done'; }).length;
+        return { done: done, total: total };
+    }
     function taskProgress(t) {
         const subs = t.subtasks || [];
         if (subs.length) {
@@ -997,7 +1002,7 @@
     }
 
     // ---------- open handlers ----------
-    client.onOpen(ADDON_ID + ':main', function () { openMain(); });
+    L.hamburger.onOpen(ADDON_ID + ':main', function () { openMain(); });
 
     // kick off loading challenges in background
     ensureLoaded().catch(function () {});

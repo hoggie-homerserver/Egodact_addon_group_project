@@ -6,6 +6,8 @@
 
     let hostReady = (typeof window !== 'undefined' && window.__egodactHostReady === true);
     const queue = [];
+    const __lmChallengeListeners = [];
+    const __lmThemeListeners = [];
 
     function flush() {
         while (queue.length) {
@@ -81,19 +83,26 @@
     }
 
     const listeners = Object.create(null);
-    const shortcutListeners = Object.create(null);
+
+    document.addEventListener('egodact:challenges:changed', function (event) {
+        const detail = (event && event.detail) || {};
+        let list = [];
+        try { list = detail.json ? JSON.parse(detail.json) : []; } catch (err) {}
+        __lmChallengeListeners.forEach(function (cb) {
+            try { cb(list); } catch (err) { console.error(err); }
+        });
+    });
+
+    document.addEventListener('egodact:theme:changed', function (event) {
+        const detail = (event && event.detail) || {};
+        __lmThemeListeners.forEach(function (cb) {
+            try { cb(detail); } catch (err) { console.error(err); }
+        });
+    });
 
     document.addEventListener('egodact:addon:open', function (event) {
         const id = (event && event.detail && event.detail.id) || null;
         const cbs = listeners[id] || [];
-        cbs.forEach(function (cb) {
-            try { cb(event.detail); } catch (err) { console.error(err); }
-        });
-    });
-
-    document.addEventListener('egodact:addon:shortcut', function (event) {
-        const id = (event && event.detail && event.detail.id) || null;
-        const cbs = shortcutListeners[id] || [];
         cbs.forEach(function (cb) {
             try { cb(event.detail); } catch (err) { console.error(err); }
         });
@@ -105,12 +114,62 @@
         registerButton: function (meta) { dispatch('button', meta || {}); },
         registerGame: function (meta) { dispatch('game', meta || {}); },
         registerSidebarPanel: function (meta) { dispatch('sidebar-panel', meta || {}); },
-        registerShortcut: function (meta) { dispatch('shortcut', meta || {}); },
-        unregisterShortcut: function (id) { dispatch('unregister-shortcut', { id: id }); },
         setLearningMode: function (v) { dispatch('learning-mode', { enabled: !!v }); },
         setHamburgerHidden: function (ids) { dispatch('hamburger-hide', { hidden: Array.isArray(ids) ? ids : [] }); },
-        schedule: function (meta) { dispatch('schedule', meta || {}); },
-        cancelSchedule: function (id) { dispatch('cancel-schedule', { id: id }); },
+        registerHamburger: function (meta) { dispatch('hamburger', meta || {}); },
+
+        // Opslag (zelfde prefix als de host, zodat data gedeeld is).
+        storage: function (addonId) {
+            const prefix = 'egodact_addon_' + (addonId || 'global') + '_';
+            return {
+                get: function (key, fallback) {
+                    try {
+                        const raw = localStorage.getItem(prefix + key);
+                        return raw === null ? fallback : JSON.parse(raw);
+                    } catch (err) { return fallback; }
+                },
+                set: function (key, value) {
+                    try { localStorage.setItem(prefix + key, JSON.stringify(value)); return true; }
+                    catch (err) { return false; }
+                },
+                remove: function (key) {
+                    try { localStorage.removeItem(prefix + key); } catch (err) {}
+                }
+            };
+        },
+
+        // Challenges van het Egodact-bord.
+        getChallenges: function (force) {
+            return new Promise(function (resolve) {
+                const requestId = 'c_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+                function handler(event) {
+                    const detail = (event && event.detail) || {};
+                    if (detail.requestId !== requestId) return;
+                    document.removeEventListener('egodact:addon:challenges:response', handler);
+                    let list = [];
+                    try { list = detail.json ? JSON.parse(detail.json) : []; } catch (err) {}
+                    resolve(list);
+                }
+                document.addEventListener('egodact:addon:challenges:response', handler);
+                dispatch('challenges:request', { requestId: requestId, force: !!force });
+                setTimeout(function () {
+                    document.removeEventListener('egodact:addon:challenges:response', handler);
+                    resolve([]);
+                }, 8000);
+            });
+        },
+
+        onChallengesChanged: function (cb) {
+            if (typeof cb === 'function') __lmChallengeListeners.push(cb);
+        },
+
+        onThemeChange: function (cb) {
+            if (typeof cb === 'function') __lmThemeListeners.push(cb);
+        },
+
+        toast: function (message, options) {
+            dispatch('toast', { message: message, options: options || {} });
+        },
         setButtonEnabled: function (addonId, id, enabled) {
             enabled = !!enabled;
             try {
@@ -136,10 +195,6 @@
         onOpen: function (id, cb) {
             if (!listeners[id]) listeners[id] = [];
             listeners[id].push(cb);
-        },
-        onShortcut: function (id, cb) {
-            if (!shortcutListeners[id]) shortcutListeners[id] = [];
-            shortcutListeners[id].push(cb);
         },
         openModal: function (titel, bodyHtml) {
             const bestaand = document.getElementById('egodact-custom-modal-backdrop');
