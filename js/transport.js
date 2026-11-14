@@ -62,7 +62,9 @@
 
     // ---------- Firestore helpers ----------
     function checklistRef(challengeId) {
-        return db.collection(COL).doc(challengeId);
+        const id = (challengeId == null) ? '' : String(challengeId);
+        if (!id) throw new Error('Deze challenge heeft geen geldig id.');
+        return db.collection(COL).doc(id);
     }
     function tasksRef(challengeId) {
         return checklistRef(challengeId).collection('tasks');
@@ -259,18 +261,28 @@
         const rowVan = new Map();
         rows.forEach(function (rij, index) {
             (rij.challenges || []).forEach(function (id) {
-                if (!rowVan.has(id)) rowVan.set(id, { naam: rij.name || '', index: index });
+                const key = String(id);
+                if (!rowVan.has(key)) rowVan.set(key, { naam: rij.name || '', index: index });
             });
         });
-        return Object.values(challenges).map(function (c) {
+        return Object.keys(challenges).map(function (key) {
+            const c = challenges[key] || {};
+            // Firestore document ids must be strings. The Egodact API can
+            // return numeric ids, which made every write/list call fail with
+            // "n.indexOf is not a function". Some payloads omit `id` entirely,
+            // so fall back to the map key.
+            const id = (c.id != null) ? String(c.id)
+                : ((c.challengeId != null) ? String(c.challengeId) : String(key));
             return {
-                id: c.id,
+                id: id,
                 name: c.name || c.title || c.challengeName || c.displayName || 'Naamloze challenge',
                 color: c.color || null,
                 phase: c.phase || 'TODO',
-                row: (rowVan.get(c.id) || {}).naam || '',
-                rowIndex: rowVan.has(c.id) ? rowVan.get(c.id).index : 999,
-                users: c.users || [],
+                row: (rowVan.get(id) || {}).naam || '',
+                rowIndex: rowVan.has(id) ? rowVan.get(id).index : 999,
+                users: (c.users || []).map(function (u) {
+                    return Object.assign({}, u, { id: (u && u.id != null) ? String(u.id) : '' });
+                }),
                 worlds: c.worlds || [],
                 endDate: c.plannedEndDate || null,
                 raw: c

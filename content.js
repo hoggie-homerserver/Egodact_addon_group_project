@@ -15,7 +15,7 @@
     const SUGGESTED_ROLES = (C.suggestedRoles || ['Leider', 'Schrijver', 'Onderzoeker', 'Presentator', 'Vormgever', 'Notulist', 'Tester']);
 
     const ADDON_ID = 'egodact-group-project';
-    const VERSION = '0.1.2';
+    const VERSION = '0.1.3';
 
     client.registerAddon({
         id: ADDON_ID,
@@ -287,6 +287,8 @@
     }
 
     function listenChallenge(challengeId) {
+        challengeId = (challengeId == null) ? '' : String(challengeId);
+        if (!challengeId) return;
         if (listeners[challengeId]) return;
         const ch = challenges.find(function (c) { return c.id === challengeId; });
         if (ch) {

@@ -10,12 +10,14 @@
         { "id": "u-chloe", "name": "Chloe Jansen", "firstName": "Chloe", "picture": "" }
       ]
     },
-    "challenge-2": {
-      "name": "Solo challenge",
-      "phase": "TODO",
+    "4242": {
+      "id": 4242,
+      "name": "Voetenprinten Arcade Game 2026",
+      "phase": "IN_PROGRESS",
       "color": "#379e00",
       "users": [
-        { "id": "u-anna", "name": "Anna Test", "firstName": "Anna", "picture": "" }
+        { "id": 101, "name": "Anna Test", "firstName": "Anna", "picture": "" },
+        { "id": 102, "name": "Bram de Vries", "firstName": "Bram", "picture": "" }
       ]
     }
   },
