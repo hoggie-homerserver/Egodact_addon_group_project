@@ -322,9 +322,9 @@
         const users = allUsers();
         const backdrop = document.createElement('div');
         backdrop.id = 'egodact-custom-modal-backdrop';
-        Object.assign(backdrop.style, { position: 'fixed', top: '0', left: '0', width: '100vw', height: '100vh', backgroundColor: 'var(--egd-backdrop)', zIndex: '9999999', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Arial, sans-serif' });
+        Object.assign(backdrop.style, { position: 'fixed', top: '0', left: '0', width: '100vw', height: '100vh', backgroundColor: 'var(--egd-backdrop)', zIndex: '9999999', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Arial, sans-serif', overflow: 'auto', padding: '16px 0' });
         const modal = document.createElement('div');
-        Object.assign(modal.style, { backgroundColor: 'var(--egd-modal)', color: 'var(--egd-tekst)', width: 'min(420px, calc(100vw - 32px))', maxHeight: 'calc(100vh - 32px)', boxSizing: 'border-box', overflow: 'auto', borderRadius: '6px', padding: '24px', display: 'flex', flexDirection: 'column', gap: '12px', boxShadow: 'var(--egd-schaduw)' });
+        Object.assign(modal.style, { backgroundColor: 'var(--egd-modal)', color: 'var(--egd-tekst)', width: 'min(420px, calc(100vw - 32px))', maxHeight: 'calc(100vh - 32px)', boxSizing: 'border-box', overflow: 'auto', borderRadius: '6px', padding: '24px', display: 'flex', flexDirection: 'column', gap: '12px', boxShadow: 'var(--egd-schaduw)', margin: 'auto' });
         modal.innerHTML = '<h2 style="margin:0;font-size:20px;">Wie ben jij?</h2><div style="font-size:13px;color:var(--egd-tekst-zacht);">Zodat we je eigen taken kunnen tonen.</div>';
         const list = document.createElement('div');
         list.style.cssText = 'display:flex;flex-direction:column;gap:6px;max-height:300px;overflow-y:auto;';
@@ -837,9 +837,9 @@
     function showAssignPicker(c, t) {
         const backdrop = document.createElement('div');
         backdrop.id = 'egodact-custom-modal-backdrop';
-        Object.assign(backdrop.style, { position: 'fixed', top: '0', left: '0', width: '100vw', height: '100vh', backgroundColor: 'var(--egd-backdrop)', zIndex: '10000000', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Arial, sans-serif' });
+        Object.assign(backdrop.style, { position: 'fixed', top: '0', left: '0', width: '100vw', height: '100vh', backgroundColor: 'var(--egd-backdrop)', zIndex: '10000000', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Arial, sans-serif', overflow: 'auto', padding: '16px 0' });
         const modal = document.createElement('div');
-        Object.assign(modal.style, { backgroundColor: 'var(--egd-modal)', color: 'var(--egd-tekst)', width: 'min(360px, calc(100vw - 32px))', maxHeight: 'calc(100vh - 32px)', boxSizing: 'border-box', overflow: 'auto', borderRadius: '6px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '10px', boxShadow: 'var(--egd-schaduw)' });
+        Object.assign(modal.style, { backgroundColor: 'var(--egd-modal)', color: 'var(--egd-tekst)', width: 'min(360px, calc(100vw - 32px))', maxHeight: 'calc(100vh - 32px)', boxSizing: 'border-box', overflow: 'auto', borderRadius: '6px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '10px', boxShadow: 'var(--egd-schaduw)', margin: 'auto' });
         const h = document.createElement('h3');
         h.textContent = 'Toewijzen: ' + t.title;
         h.style.cssText = 'margin:0;font-size:16px;';
@@ -886,9 +886,9 @@
         const c = challenges.find(function (x) { return x.id === challengeId; });
         const backdrop = document.createElement('div');
         backdrop.id = 'egodact-custom-modal-backdrop';
-        Object.assign(backdrop.style, { position: 'fixed', top: '0', left: '0', width: '100vw', height: '100vh', backgroundColor: 'var(--egd-backdrop)', zIndex: '10000000', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Arial, sans-serif' });
+        Object.assign(backdrop.style, { position: 'fixed', top: '0', left: '0', width: '100vw', height: '100vh', backgroundColor: 'var(--egd-backdrop)', zIndex: '10000000', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Arial, sans-serif', overflow: 'auto', padding: '16px 0' });
         const modal = document.createElement('div');
-        Object.assign(modal.style, { backgroundColor: 'var(--egd-modal)', color: 'var(--egd-tekst)', width: 'min(460px, calc(100vw - 32px))', maxHeight: 'calc(100vh - 32px)', boxSizing: 'border-box', overflow: 'hidden', borderRadius: '6px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '10px', boxShadow: 'var(--egd-schaduw)' });
+        Object.assign(modal.style, { backgroundColor: 'var(--egd-modal)', color: 'var(--egd-tekst)', width: 'min(460px, calc(100vw - 32px))', maxHeight: 'calc(100vh - 32px)', boxSizing: 'border-box', overflow: 'hidden', borderRadius: '6px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '10px', boxShadow: 'var(--egd-schaduw)', margin: 'auto' });
         const h = document.createElement('h3');
         h.textContent = existing ? 'Taak bewerken' : 'Nieuwe taak';
         h.style.cssText = 'margin:0;font-size:16px;';
