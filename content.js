@@ -886,15 +886,15 @@
         const c = challenges.find(function (x) { return x.id === challengeId; });
         const backdrop = document.createElement('div');
         backdrop.id = 'egodact-custom-modal-backdrop';
-        Object.assign(backdrop.style, { position: 'fixed', top: '0', left: '0', width: '100vw', height: '100vh', backgroundColor: 'var(--egd-backdrop)', zIndex: '10000000', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Arial, sans-serif', overflow: 'auto', padding: '16px 0' });
+        Object.assign(backdrop.style, { position: 'fixed', top: '0', left: '0', width: '100vw', height: '100vh', backgroundColor: 'var(--egd-backdrop)', zIndex: '10000000', fontFamily: 'Arial, sans-serif', overflowY: 'auto', overflowX: 'hidden', padding: '16px 0', boxSizing: 'border-box', overscrollBehavior: 'contain' });
         const modal = document.createElement('div');
-        Object.assign(modal.style, { backgroundColor: 'var(--egd-modal)', color: 'var(--egd-tekst)', width: 'min(460px, calc(100vw - 32px))', maxHeight: 'calc(100vh - 32px)', boxSizing: 'border-box', overflow: 'hidden', borderRadius: '6px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '10px', boxShadow: 'var(--egd-schaduw)', margin: 'auto' });
+        Object.assign(modal.style, { backgroundColor: 'var(--egd-modal)', color: 'var(--egd-tekst)', width: 'min(460px, calc(100vw - 32px))', boxSizing: 'border-box', borderRadius: '6px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '10px', boxShadow: 'var(--egd-schaduw)', margin: '0 auto' });
         const h = document.createElement('h3');
         h.textContent = existing ? 'Taak bewerken' : 'Nieuwe taak';
         h.style.cssText = 'margin:0;font-size:16px;';
         modal.appendChild(h);
         const bodyScroll = document.createElement('div');
-        Object.assign(bodyScroll.style, { flex: '1', minHeight: '0', overflowY: 'auto', paddingRight: '4px', display: 'flex', flexDirection: 'column', gap: '10px' });
+        Object.assign(bodyScroll.style, { display: 'flex', flexDirection: 'column', gap: '10px' });
         modal.appendChild(bodyScroll);
 
         function field(label, node) {
@@ -992,7 +992,7 @@
         const cancel = document.createElement('button');
         cancel.type = 'button'; cancel.textContent = 'Annuleren';
         Object.assign(cancel.style, { padding: '8px 12px', border: '1px solid var(--egd-rand)', borderRadius: '4px', background: 'transparent', color: 'var(--egd-tekst)', cursor: 'pointer' });
-        cancel.addEventListener('click', function () { backdrop.remove(); });
+        cancel.addEventListener('click', function () { closeEditor(); });
         const save = document.createElement('button');
         save.type = 'button'; save.textContent = existing ? 'Opslaan' : 'Toevoegen';
         Object.assign(save.style, { padding: '8px 12px', border: 'none', borderRadius: '4px', background: 'var(--egd-accent)', color: 'var(--egd-accent-tekst)', cursor: 'pointer', fontWeight: 'bold' });
@@ -1023,13 +1023,42 @@
                 });
                 T.createTask(challengeId, task);
             }
-            backdrop.remove();
+            closeEditor();
         });
         btns.append(cancel, save);
         modal.appendChild(btns);
         backdrop.appendChild(modal);
         document.body.appendChild(backdrop);
-        backdrop.addEventListener('click', function (e) { if (e.target === backdrop) backdrop.remove(); });
+
+        let closed = false;
+        function closeEditor() {
+            if (closed) return;
+            closed = true;
+            window.removeEventListener('wheel', onWheel, true);
+            backdrop.remove();
+        }
+        // The host page can block wheel scrolling while a modal is open.
+        // Scroll the backdrop manually so the form always scrolls.
+        function onWheel(e) {
+            if (!document.body.contains(backdrop)) {
+                window.removeEventListener('wheel', onWheel, true);
+                return;
+            }
+            if (!backdrop.contains(e.target)) return;
+            const before = backdrop.scrollTop;
+            backdrop.scrollTop = before + e.deltaY;
+            if (backdrop.scrollTop !== before) e.preventDefault();
+        }
+        window.addEventListener('wheel', onWheel, { capture: true, passive: false });
+
+        backdrop.addEventListener('click', function (e) { if (e.target === backdrop) closeEditor(); });
+        backdrop.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') { closeEditor(); return; }
+            const tag = (e.target && e.target.tagName) || '';
+            if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+            if (e.key === 'PageDown') backdrop.scrollTop += 200;
+            if (e.key === 'PageUp') backdrop.scrollTop -= 200;
+        });
         setTimeout(function () { titleInput.focus(); }, 50);
     }
 
