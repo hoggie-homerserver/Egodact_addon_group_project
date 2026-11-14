@@ -162,6 +162,22 @@
         }
         // If only one user across all group challenges, auto-select.
         if (users.length === 1) { meId = users[0].id; localStorage.setItem('egodact_group_me', meId); return meId; }
+        // Heuristic: the user who appears in the most challenges is likely "me".
+        // (Same approach the host uses to find your avatar/name.)
+        if (users.length > 1 && challenges.length > 0) {
+            const counts = {};
+            challenges.forEach(function (c) {
+                (c.users || []).forEach(function (u) {
+                    if (u && u.id) counts[u.id] = (counts[u.id] || 0) + 1;
+                });
+            });
+            const ranked = Object.keys(counts).map(function (id) { return { id: id, n: counts[id] }; }).sort(function (a, b) { return b.n - a.n; });
+            if (ranked.length && ranked[0].n > 1 && (ranked.length === 1 || ranked[0].n > ranked[1].n)) {
+                meId = ranked[0].id;
+                localStorage.setItem('egodact_group_me', meId);
+                return meId;
+            }
+        }
         return null;
     }
 
@@ -294,7 +310,7 @@
     function openMain() {
         if (currentBackdrop) { closeMain(); }
         ensureLoaded().then(function () {
-            if (!resolveMe() && groupChallenges().length) {
+            if (!resolveMe() && groupChallenges().length && allUsers().length > 1) {
                 showMePicker();
                 return;
             }
